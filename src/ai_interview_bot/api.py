@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from openai import RateLimitError, APIError
 
 from .graph import build_interview_app
 from .state import InterviewConfig, QARecord
@@ -34,12 +35,18 @@ class AnswerRequest(BaseModel):
     """Payload for submitting an answer to the current interview question."""
 
     answer: str = Field(..., min_length=1, description="Candidate response to the current question.")
+    time_taken: Optional[int] = Field(None, ge=0, description="Time taken in seconds (optional, calculated automatically if not provided).")
+    time_expired: Optional[bool] = Field(None, description="Whether the time limit was exceeded.")
 
 
 class EvaluationModel(BaseModel):
     """API representation of the evaluation breakdown."""
 
-    score: int
+    score: int  # Legacy field
+    overall_score: Optional[int] = None
+    technical_depth: Optional[int] = None
+    communication: Optional[int] = None
+    problem_solving: Optional[int] = None
     reasoning: str = ""
     strengths: List[str] = Field(default_factory=list)
     improvements: List[str] = Field(default_factory=list)
@@ -66,6 +73,16 @@ class InterviewStepResponse(BaseModel):
     feedback: Optional[str] = None
     qa_history: List[QARecordModel] = Field(default_factory=list)
     prompt: Optional[str] = None
+    # Time tracking fields
+    question_difficulty: Optional[str] = None
+    question_time_limit: Optional[int] = None  # seconds
+    time_elapsed: Optional[int] = None  # seconds elapsed on current question
+    time_remaining: Optional[int] = None  # seconds remaining
+    total_time_elapsed: Optional[int] = None  # total interview time
+    time_expired: Optional[bool] = None
+    # Follow-up tracking
+    is_follow_up: Optional[bool] = None
+    follow_up_count: Optional[int] = None
 
 
 @dataclass(slots=True)
@@ -146,7 +163,11 @@ def _serialise_evaluation(data: Optional[Dict[str, Any]]) -> Optional[Evaluation
     if not data:
         return None
     return EvaluationModel(
-        score=int(data.get("score", 0)),
+        score=int(data.get("score", data.get("overall_score", 0))),
+        overall_score=data.get("overall_score"),
+        technical_depth=data.get("technical_depth"),
+        communication=data.get("communication"),
+        problem_solving=data.get("problem_solving"),
         reasoning=str(data.get("reasoning", "")),
         strengths=list(data.get("strengths") or []),
         improvements=list(data.get("improvements") or []),
@@ -173,6 +194,8 @@ def _prepare_response(
     *,
     prompt_hint: Optional[str],
 ) -> InterviewStepResponse:
+    from datetime import datetime
+    
     state_values = get_state_values(session.app, session.graph_config)
     question = state_values.get("current_question")
     question_index = state_values.get("question_index")
@@ -203,6 +226,21 @@ def _prepare_response(
     else:
         prompt_value = prompt_hint_value or question or session.last_question
 
+    # Calculate time remaining
+    time_elapsed = None
+    time_remaining = None
+    answer_start_time_str = state_values.get("answer_start_time")
+    question_time_limit = state_values.get("question_time_limit")
+    
+    if answer_start_time_str and question_time_limit:
+        try:
+            start_time = datetime.fromisoformat(answer_start_time_str)
+            elapsed = datetime.now() - start_time
+            time_elapsed = int(elapsed.total_seconds())
+            time_remaining = max(0, question_time_limit - time_elapsed)
+        except (ValueError, TypeError):
+            pass
+
     return InterviewStepResponse(
         session_id=session_id,
         status=status_value,
@@ -213,6 +251,14 @@ def _prepare_response(
         feedback=feedback,
         qa_history=_serialise_history(qa_history),
         prompt=prompt_value,
+        question_difficulty=state_values.get("question_difficulty"),
+        question_time_limit=question_time_limit,
+        time_elapsed=time_elapsed,
+        time_remaining=time_remaining,
+        total_time_elapsed=state_values.get("total_time_elapsed"),
+        time_expired=state_values.get("time_expired"),
+        is_follow_up=state_values.get("is_follow_up"),
+        follow_up_count=state_values.get("follow_up_count"),
     )
 
 
@@ -222,13 +268,29 @@ async def _drive_session(session_id: str, session: InterviewSession) -> Intervie
         if session.finished:
             return _prepare_response(session_id, session, prompt_hint=None)
 
-        for event in session.app.stream(None, config=session.graph_config):
-            for payload in iter_event_values(event):
-                if "current_question" in payload:
-                    session.last_question = payload["current_question"]
-            if "__interrupt__" in event:
-                prompt_hint = extract_interrupt_value(event.get("__interrupt__"))
-                break
+        try:
+            for event in session.app.stream(None, config=session.graph_config):
+                for payload in iter_event_values(event):
+                    if "current_question" in payload:
+                        session.last_question = payload["current_question"]
+                if "__interrupt__" in event:
+                    prompt_hint = extract_interrupt_value(event.get("__interrupt__"))
+                    break
+        except RateLimitError as e:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"OpenAI API rate limit exceeded. Please check your API quota and billing details. Original error: {str(e)}",
+            )
+        except APIError as e:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"OpenAI API error: {str(e)}",
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"An unexpected error occurred: {str(e)}",
+            )
 
         return _prepare_response(session_id, session, prompt_hint=prompt_hint)
 
@@ -253,12 +315,14 @@ async def submit_answer(session_id: str, payload: AnswerRequest) -> InterviewSte
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Interview already completed.",
             )
-        session.app.update_state(
-            session.graph_config,
-            {
-                "answer": payload.answer.strip(),
-            },
-        )
+        
+        update_data = {"answer": payload.answer.strip()}
+        
+        # If time_expired is explicitly set, update state
+        if payload.time_expired is not None:
+            update_data["time_expired"] = payload.time_expired
+        
+        session.app.update_state(session.graph_config, update_data)
     response = await _drive_session(session_id, session)
     return response
 

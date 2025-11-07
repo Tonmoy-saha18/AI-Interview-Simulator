@@ -145,7 +145,10 @@ from .state import QARecord
 
 
 def format_history(history: Iterable[QARecord]) -> str:
-    """Format QA history for prompt injection."""
+    """Format QA history for prompt injection.
+    
+    Follow-up questions are displayed nested under their parent questions.
+    """
     if not history:
         return "No questions asked yet."
 
@@ -168,9 +171,37 @@ def format_history(history: Iterable[QARecord]) -> str:
             score_line += f" ({', '.join(dim_scores)})"
         score_line += f" - {evaluation.get('reasoning', '')}"
         
+        # Format main question
         lines.append(
             f"[Question {idx}] {record['question']}\n"
             f"[Answer] {record['answer']}\n"
             f"{score_line}"
         )
+        
+        # Format nested follow-up questions if any
+        follow_ups = record.get("follow_ups", [])
+        if follow_ups:
+            for follow_up_idx, follow_up in enumerate(follow_ups, start=1):
+                follow_up_eval = follow_up.get("evaluation", {})
+                follow_up_score = follow_up_eval.get("overall_score") or follow_up_eval.get("score", "N/A")
+                
+                # Include dimension scores for follow-up
+                follow_up_dim_scores = []
+                if follow_up_eval.get("technical_depth"):
+                    follow_up_dim_scores.append(f"Technical: {follow_up_eval['technical_depth']}/5")
+                if follow_up_eval.get("communication"):
+                    follow_up_dim_scores.append(f"Communication: {follow_up_eval['communication']}/5")
+                if follow_up_eval.get("problem_solving"):
+                    follow_up_dim_scores.append(f"Problem Solving: {follow_up_eval['problem_solving']}/5")
+                
+                follow_up_score_line = f"[Score] {follow_up_score}/5"
+                if follow_up_dim_scores:
+                    follow_up_score_line += f" ({', '.join(follow_up_dim_scores)})"
+                follow_up_score_line += f" - {follow_up_eval.get('reasoning', '')}"
+                
+                lines.append(
+                    f"  [Follow-up {follow_up_idx}] {follow_up['question']}\n"
+                    f"  [Answer] {follow_up['answer']}\n"
+                    f"  {follow_up_score_line}"
+                )
     return "\n\n".join(lines)

@@ -12,11 +12,16 @@ def route_after_evaluation(state: InterviewState) -> str:
         "finish" - if question limit reached
         "ask_follow_up" - if follow-up is needed (low score and not exceeded max follow-ups)
         "ask_next" - if more questions needed
+    
+    Note: Only counts main questions (not follow-ups) when checking question limit,
+    since follow-ups are nested under their parent questions.
     """
+    # Count only main questions (follow-ups are nested, not in qa_history)
     asked = len(state.get("qa_history", []))
     limit = state.get("question_limit", 3)
     
     # Check if we've reached the question limit
+    # Note: We only count main questions, not follow-ups
     if asked >= limit:
         return "finish"
     

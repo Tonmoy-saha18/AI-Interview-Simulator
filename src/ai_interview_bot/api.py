@@ -59,6 +59,7 @@ class QARecordModel(BaseModel):
     question: str
     answer: str
     evaluation: Optional[EvaluationModel] = None
+    follow_ups: Optional[List["QARecordModel"]] = None  # Nested follow-up questions
 
 
 class InterviewStepResponse(BaseModel):
@@ -176,13 +177,28 @@ def _serialise_evaluation(data: Optional[Dict[str, Any]]) -> Optional[Evaluation
 
 
 def _serialise_history(history: List[QARecord]) -> List[QARecordModel]:
+    """Serialize QA history including nested follow-up questions."""
     records: List[QARecordModel] = []
     for item in history:
+        # Serialize nested follow-ups if any
+        follow_ups = item.get("follow_ups")
+        follow_ups_models = None
+        if follow_ups:
+            follow_ups_models = [
+                QARecordModel(
+                    question=fu.get("question", ""),
+                    answer=fu.get("answer", ""),
+                    evaluation=_serialise_evaluation(fu.get("evaluation")),
+                )
+                for fu in follow_ups
+            ]
+        
         records.append(
             QARecordModel(
                 question=item.get("question", ""),
                 answer=item.get("answer", ""),
                 evaluation=_serialise_evaluation(item.get("evaluation")),
+                follow_ups=follow_ups_models,
             )
         )
     return records

@@ -20,12 +20,13 @@ class EvaluationBreakdown(TypedDict, total=False):
     follow_up: Optional[str]
 
 
-class QARecord(TypedDict):
+class QARecord(TypedDict, total=False):
     """Single question/answer/evaluation triple stored in memory."""
 
     question: str
     answer: str
     evaluation: EvaluationBreakdown
+    follow_ups: List["QARecord"]  # Nested follow-up questions
 
 
 class InterviewState(TypedDict, total=False):

@@ -145,23 +145,38 @@ class EvaluationNode:
         }
 
         history = state.get("qa_history", [])
-        history.append(qa_record)
+        is_follow_up = state.get("is_follow_up", False)
+        
+        if is_follow_up and history:
+            # This is a follow-up question - add it to the last question's follow_ups list
+            last_record = history[-1]
+            if "follow_ups" not in last_record:
+                last_record["follow_ups"] = []
+            last_record["follow_ups"].append(qa_record)
+        else:
+            # This is a main question - append as new record
+            history.append(qa_record)
 
         # Update total time elapsed
         total_time = state.get("total_time_elapsed", 0)
         if time_taken:
             total_time += time_taken
 
-        state.update(
-            {
-                "evaluation": evaluation,
-                "qa_history": history,
-                "answer": "",
-                "answer_time_taken": time_taken,
-                "total_time_elapsed": total_time,
-                "time_expired": time_expired,
-            }
-        )
+        # Reset follow-up flag after evaluation if this was a follow-up
+        update_data = {
+            "evaluation": evaluation,
+            "qa_history": history,
+            "answer": "",
+            "answer_time_taken": time_taken,
+            "total_time_elapsed": total_time,
+            "time_expired": time_expired,
+        }
+        
+        # If we just evaluated a follow-up, reset the follow-up flag for next question
+        if is_follow_up:
+            update_data["is_follow_up"] = False
+        
+        state.update(update_data)
         return state
 
 

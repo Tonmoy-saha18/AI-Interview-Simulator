@@ -9,19 +9,24 @@ from typing import Any, Dict, List, Optional, TypedDict
 class EvaluationBreakdown(TypedDict, total=False):
     """Structured evaluation returned by the evaluation node."""
 
-    score: int
+    score: int  # Legacy field, kept for backward compatibility
+    overall_score: int  # Weighted average of dimension scores
+    technical_depth: int  # 1-5
+    communication: int  # 1-5
+    problem_solving: int  # 1-5
     reasoning: str
     strengths: List[str]
     improvements: List[str]
     follow_up: Optional[str]
 
 
-class QARecord(TypedDict):
+class QARecord(TypedDict, total=False):
     """Single question/answer/evaluation triple stored in memory."""
 
     question: str
     answer: str
     evaluation: EvaluationBreakdown
+    follow_ups: List["QARecord"]  # Nested follow-up questions
 
 
 class InterviewState(TypedDict, total=False):
@@ -37,6 +42,17 @@ class InterviewState(TypedDict, total=False):
     evaluation: EvaluationBreakdown
     qa_history: List[QARecord]
     feedback: str
+    # Time tracking fields
+    question_difficulty: str  # "easy", "medium", "hard"
+    question_time_limit: int  # seconds based on difficulty
+    answer_start_time: Optional[str]  # ISO timestamp
+    answer_time_taken: Optional[int]  # seconds
+    total_time_elapsed: int  # cumulative seconds
+    time_expired: bool  # True if time limit was exceeded
+    # Follow-up question tracking
+    is_follow_up: bool  # True if current question is a follow-up
+    follow_up_count: int  # Number of follow-ups asked for current question
+    max_follow_ups_per_question: int  # Maximum follow-ups allowed (default: 1)
 
 
 @dataclass(slots=True)
@@ -59,6 +75,11 @@ class InterviewConfig:
             "question_limit": self.question_limit,
             "question_index": 0,
             "qa_history": [],
+            "total_time_elapsed": 0,
+            "is_follow_up": False,
+            "follow_up_count": 0,
+            "max_follow_ups_per_question": 1,
+            "time_expired": False,
         }
         state.update(self.extra_context)
         return state

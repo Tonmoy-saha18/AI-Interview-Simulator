@@ -12,8 +12,8 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from .config import PromptBundle, build_default_prompts
-from .nodes import EvaluationNode, FeedbackNode, QuestionNode
-from .routing import route_after_evaluation
+from .nodes import EvaluationNode, FeedbackNode, FollowUpQuestionNode, QuestionNode
+from .routing import route_after_evaluation, route_after_follow_up
 from .state import InterviewState
 
 
@@ -27,6 +27,10 @@ def _build_evaluation_chain(llm: Runnable, prompts: PromptBundle) -> Runnable:
 
 def _build_feedback_chain(llm: Runnable, prompts: PromptBundle) -> Runnable:
     return prompts.feedback | llm | StrOutputParser()
+
+
+def _build_follow_up_chain(llm: Runnable, prompts: PromptBundle) -> Runnable:
+    return prompts.follow_up | llm | StrOutputParser()
 
 
 def build_interview_app(
@@ -53,11 +57,13 @@ def build_interview_app(
 
     question_node = QuestionNode(_build_question_chain(llm, prompts), prompts)
     evaluation_node = EvaluationNode(_build_evaluation_chain(llm, prompts))
+    follow_up_node = FollowUpQuestionNode(llm, prompts)
     feedback_node = FeedbackNode(_build_feedback_chain(llm, prompts))
 
     graph = StateGraph(InterviewState)
     graph.add_node("generate_question", question_node)
     graph.add_node("evaluate_answer", evaluation_node)
+    graph.add_node("ask_follow_up", follow_up_node)
     graph.add_node("generate_feedback", feedback_node)
 
     graph.set_entry_point("generate_question")
@@ -67,7 +73,16 @@ def build_interview_app(
         route_after_evaluation,
         {
             "ask_next": "generate_question",
+            "ask_follow_up": "ask_follow_up",
             "finish": "generate_feedback",
+        },
+    )
+    # After follow-up question, always go back to evaluation
+    graph.add_conditional_edges(
+        "ask_follow_up",
+        route_after_follow_up,
+        {
+            "evaluate_answer": "evaluate_answer",
         },
     )
     graph.add_edge("generate_feedback", END)
@@ -76,7 +91,7 @@ def build_interview_app(
     if interrupt_after_question:
         app = graph.compile(
             checkpointer=checkpointer,
-            interrupt_after=["generate_question"],
+            interrupt_after=["generate_question", "ask_follow_up"],
         )
     else:
         app = graph.compile(checkpointer=checkpointer)

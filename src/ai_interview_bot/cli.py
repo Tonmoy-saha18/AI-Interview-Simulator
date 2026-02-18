@@ -6,7 +6,7 @@ import argparse
 import os
 import sys
 import textwrap
-from typing import Any, Dict, Iterable, Optional
+from typing import Iterable, Optional
 from uuid import uuid4
 
 from dotenv import load_dotenv
@@ -14,43 +14,7 @@ from langgraph.errors import GraphInterrupt
 
 from .graph import build_interview_app
 from .state import InterviewConfig
-
-
-def _event_iter_values(event: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
-    """Yield nested dicts from a LangGraph stream event."""
-    if not isinstance(event, dict):
-        return []
-    for value in event.values():
-        if isinstance(value, dict):
-            yield value
-
-
-def _current_state_values(app: Any, graph_config: Dict[str, Any]) -> Dict[str, Any]:
-    """Safely read the current state values from the compiled graph."""
-    snapshot = getattr(app, "get_state", None)
-    if not callable(snapshot):
-        return {}
-    try:
-        current_state = snapshot(graph_config)
-    except Exception:  # pragma: no cover - defensive fallback
-        return {}
-    if isinstance(current_state, dict):
-        return current_state.get("values", {}) or {}
-    values = getattr(current_state, "values", None)
-    return values or {}
-
-
-def _first_interrupt_payload(payload: Any) -> Optional[Any]:
-    """Extract the first meaningful interrupt payload from nested data."""
-    if payload is None:
-        return None
-    if isinstance(payload, (list, tuple)):
-        for item in payload:
-            extracted = _first_interrupt_payload(item)
-            if extracted is not None:
-                return extracted
-        return None
-    return getattr(payload, "value", payload)
+from .stream_utils import extract_interrupt_value, get_state_values, iter_event_values
 
 
 def run_cli(argv: Iterable[str] | None = None) -> int:
@@ -108,7 +72,7 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
         interrupted = False
         try:
             for event in app.stream(None, config=graph_config):
-                for payload in _event_iter_values(event):
+                for payload in iter_event_values(event):
                     if "current_question" in payload:
                         last_question = payload["current_question"]
                         question_number = payload.get(
@@ -137,9 +101,9 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
                         return 0
                 if "__interrupt__" in event:
                     interrupted = True
-                    state_values = _current_state_values(app, graph_config)
+                    state_values = get_state_values(app, graph_config)
                     question_text = state_values.get("current_question") or last_question
-                    prompt_hint = _first_interrupt_payload(event.get("__interrupt__"))
+                    prompt_hint = extract_interrupt_value(event.get("__interrupt__"))
                     prompt_text = (
                         str(prompt_hint).strip()
                         if isinstance(prompt_hint, str) and prompt_hint.strip()
@@ -158,9 +122,9 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
                 return 0
         except GraphInterrupt as interruption:
             interrupted = True
-            state_values = _current_state_values(app, graph_config)
+            state_values = get_state_values(app, graph_config)
             question_text = state_values.get("current_question") or last_question
-            prompt_hint = _first_interrupt_payload(interruption.args if interruption.args else None)
+            prompt_hint = extract_interrupt_value(interruption.args if interruption.args else None)
             prompt_text = (
                 str(prompt_hint).strip()
                 if isinstance(prompt_hint, str) and prompt_hint.strip()

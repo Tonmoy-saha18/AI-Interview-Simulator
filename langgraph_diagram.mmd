@@ -1,0 +1,17 @@
+graph TD
+    START([Start]) --> generate_question[generate_question<br/>QuestionNode<br/>Sets difficulty & time limit]
+    generate_question --> evaluate_answer[evaluate_answer<br/>EvaluationNode<br/>Multi-dimensional scoring<br/>Time tracking]
+    evaluate_answer --> route{route_after_evaluation}
+    route -->|score < 3 OR follow_up hint<br/>ask_follow_up| ask_follow_up[ask_follow_up<br/>FollowUpQuestionNode<br/>Shorter time limit]
+    route -->|asked < question_limit<br/>ask_next| generate_question
+    route -->|asked >= question_limit<br/>finish| generate_feedback[generate_feedback<br/>FeedbackNode]
+    ask_follow_up --> evaluate_answer
+    generate_feedback --> END([End])
+    
+    style START fill:#90EE90
+    style END fill:#FFB6C1
+    style generate_question fill:#87CEEB
+    style evaluate_answer fill:#DDA0DD
+    style ask_follow_up fill:#FFB347
+    style generate_feedback fill:#F0E68C
+    style route fill:#FFA500

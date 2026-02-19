@@ -1,4 +1,4 @@
-from ai_interview_bot.routing import route_after_evaluation
+from ai_interview_bot.graph.routing import route_after_evaluation
 
 
 def test_route_after_evaluation_continues_when_below_limit():

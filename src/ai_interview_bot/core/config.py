@@ -29,6 +29,12 @@ class Settings:
 
     MAX_CV_FILE_SIZE_MB: int = int(os.getenv("MAX_CV_FILE_SIZE_MB", "10"))
 
+    # JWT / Auth
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
+    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
+    REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+
 
 @lru_cache
 def get_settings() -> Settings:

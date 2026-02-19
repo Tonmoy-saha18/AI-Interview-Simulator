@@ -21,7 +21,7 @@ def get_state_values(app: Any, graph_config: Dict[str, Any]) -> Dict[str, Any]:
         return {}
     try:
         current_state = snapshot(graph_config)
-    except Exception:  # pragma: no cover - defensive fallback
+    except Exception:
         return {}
 
     if isinstance(current_state, dict):

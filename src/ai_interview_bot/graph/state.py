@@ -26,7 +26,7 @@ class QARecord(TypedDict, total=False):
     question: str
     answer: str
     evaluation: EvaluationBreakdown
-    follow_ups: List["QARecord"]  # Nested follow-up questions
+    follow_ups: List["QARecord"]
 
 
 class InterviewState(TypedDict, total=False):
@@ -42,17 +42,15 @@ class InterviewState(TypedDict, total=False):
     evaluation: EvaluationBreakdown
     qa_history: List[QARecord]
     feedback: str
-    # Time tracking fields
-    question_difficulty: str  # "easy", "medium", "hard"
-    question_time_limit: int  # seconds based on difficulty
-    answer_start_time: Optional[str]  # ISO timestamp
-    answer_time_taken: Optional[int]  # seconds
-    total_time_elapsed: int  # cumulative seconds
-    time_expired: bool  # True if time limit was exceeded
-    # Follow-up question tracking
-    is_follow_up: bool  # True if current question is a follow-up
-    follow_up_count: int  # Number of follow-ups asked for current question
-    max_follow_ups_per_question: int  # Maximum follow-ups allowed (default: 1)
+    question_difficulty: str
+    question_time_limit: int
+    answer_start_time: Optional[str]
+    answer_time_taken: Optional[int]
+    total_time_elapsed: int
+    time_expired: bool
+    is_follow_up: bool
+    follow_up_count: int
+    max_follow_ups_per_question: int
 
 
 @dataclass(slots=True)

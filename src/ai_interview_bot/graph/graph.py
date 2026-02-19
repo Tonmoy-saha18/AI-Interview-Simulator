@@ -11,7 +11,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from .config import PromptBundle, build_default_prompts
+from .prompts import PromptBundle, build_default_prompts
 from .nodes import EvaluationNode, FeedbackNode, FollowUpQuestionNode, QuestionNode
 from .routing import route_after_evaluation, route_after_follow_up
 from .state import InterviewState
@@ -43,7 +43,7 @@ def build_interview_app(
     Parameters
     ----------
     llm:
-        LangChain-compatible chat runnable. Defaults to `ChatOpenAI` (gpt-4o-mini).
+        LangChain-compatible chat runnable. Defaults to ``ChatOpenAI`` (gpt-4o-mini).
     prompts:
         Optional custom prompt templates.
     interrupt_after_question:
@@ -77,7 +77,6 @@ def build_interview_app(
             "finish": "generate_feedback",
         },
     )
-    # After follow-up question, always go back to evaluation
     graph.add_conditional_edges(
         "ask_follow_up",
         route_after_follow_up,

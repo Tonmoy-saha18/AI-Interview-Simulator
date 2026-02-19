@@ -2,10 +2,26 @@
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+
+# ---------------------------------------------------------------------------
+# Enums
+# ---------------------------------------------------------------------------
+
+class InterviewTypeEnum(str, Enum):
+    BEHAVIORAL = "behavioral"
+    TECHNICAL = "technical"
+    MIXED = "mixed"
+    CODING_ONLY = "coding_only"
+
+
+# ---------------------------------------------------------------------------
+# Request schemas
+# ---------------------------------------------------------------------------
 
 class InterviewStartRequest(BaseModel):
     """Payload for starting a new interview session."""
@@ -16,6 +32,10 @@ class InterviewStartRequest(BaseModel):
     candidate_profile: str = Field(
         "",
         description="Optional candidate profile/resume summary to contextualise the interview.",
+    )
+    interview_type: InterviewTypeEnum = Field(
+        InterviewTypeEnum.BEHAVIORAL,
+        description="Type of interview: behavioral, technical, mixed, or coding_only.",
     )
 
 
@@ -28,6 +48,10 @@ class AnswerRequest(BaseModel):
     )
     time_expired: Optional[bool] = Field(None, description="Whether the time limit was exceeded.")
 
+
+# ---------------------------------------------------------------------------
+# Shared response models
+# ---------------------------------------------------------------------------
 
 class EvaluationModel(BaseModel):
     """API representation of the evaluation breakdown."""
@@ -72,3 +96,63 @@ class InterviewStepResponse(BaseModel):
     time_expired: Optional[bool] = None
     is_follow_up: Optional[bool] = None
     follow_up_count: Optional[int] = None
+
+
+# ---------------------------------------------------------------------------
+# Interview history & report schemas (Sprint 3)
+# ---------------------------------------------------------------------------
+
+class InterviewSessionListItem(BaseModel):
+    """Summary of a past interview session for listing."""
+
+    session_id: str
+    role: str
+    level: str
+    interview_type: str
+    total_questions: int
+    status: str
+    overall_score: Optional[int] = None
+    started_at: str
+    completed_at: Optional[str] = None
+    total_time_seconds: Optional[int] = None
+
+
+class InterviewQuestionDetail(BaseModel):
+    """Detailed view of a single question within a report."""
+
+    question_id: str
+    sequence_number: int
+    question_text: str
+    question_type: Optional[str] = None
+    difficulty: Optional[str] = None
+    answer_text: Optional[str] = None
+    score: Optional[int] = None
+    evaluation: Optional[EvaluationModel] = None
+    time_taken_seconds: Optional[int] = None
+    time_expired: bool = False
+    follow_ups: List["InterviewQuestionDetail"] = Field(default_factory=list)
+
+
+class InterviewReportResponse(BaseModel):
+    """Full structured report for a completed interview session."""
+
+    session_id: str
+    role: str
+    level: str
+    interview_type: str
+    total_questions: int
+    status: str
+    started_at: str
+    completed_at: Optional[str] = None
+    total_time_seconds: Optional[int] = None
+
+    overall_score: Optional[int] = None
+    technical_depth_score: Optional[int] = None
+    communication_score: Optional[int] = None
+    problem_solving_score: Optional[int] = None
+    summary_text: Optional[str] = None
+    strengths: List[str] = Field(default_factory=list)
+    improvements: List[str] = Field(default_factory=list)
+
+    questions: List[InterviewQuestionDetail] = Field(default_factory=list)
+    qa_history: List[QARecordModel] = Field(default_factory=list)

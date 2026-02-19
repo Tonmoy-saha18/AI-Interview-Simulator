@@ -28,7 +28,7 @@ settings = get_settings()
 app = FastAPI(
     title="AI Interview Simulator API",
     description="HTTP interface for running AI-powered interview simulations.",
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
 

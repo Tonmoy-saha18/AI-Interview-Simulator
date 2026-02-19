@@ -13,7 +13,15 @@ src_path = os.path.join(project_root, "src")
 sys.path.insert(0, src_path)
 
 from ai_interview_bot.core.database import Base
-from ai_interview_bot.models import InterviewLink, InterviewResult, Organization, User  # noqa: F401
+from ai_interview_bot.models import (  # noqa: F401
+    InterviewFeedback,
+    InterviewLink,
+    InterviewQuestion,
+    InterviewResult,
+    InterviewSession,
+    Organization,
+    User,
+)
 
 config = context.config
 

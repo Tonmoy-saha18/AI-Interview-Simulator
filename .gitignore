@@ -8,6 +8,13 @@ wheels/
 
 # Virtual environments
 .venv
+
+# IDE
 .idea
+.vscode
+
+# Environment (keep .env.example as a template)
 .env
-.env.example
+
+# Uploaded files (CVs etc.)
+uploads/

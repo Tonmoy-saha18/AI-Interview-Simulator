@@ -1,0 +1,35 @@
+# Virtual env and caches
+.venv
+venv
+__pycache__
+*.py[cod]
+*.pyo
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+# Git and IDE
+.git
+.gitignore
+.idea
+.vscode
+*.swp
+*.swo
+
+# Env (use env_file in compose; do not bake into image)
+.env
+.env.local
+.env.*.local
+
+# Docs and meta (optional; keep if you want them in image)
+# README.md
+# SETUP_GUIDE.md
+# PRIORITY_MATRIX.md
+
+# Uploads (mounted as volume in compose)
+uploads
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore

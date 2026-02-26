@@ -29,6 +29,8 @@ from ..models.interview import (
 from ..hr.service import LinkService
 from .schemas import (
     AnswerRequest,
+    CodingProblemBrief,
+    ComplexityAnalysisModel,
     EvaluationModel,
     InterviewQuestionDetail,
     InterviewReportResponse,
@@ -234,6 +236,27 @@ def prepare_response(
         except (ValueError, TypeError):
             pass
 
+    # Build coding problem brief if present
+    coding_problem = None
+    problem_data = state_values.get("current_problem_data")
+    if problem_data:
+        coding_problem = CodingProblemBrief(
+            problem_id=str(problem_data.get("id", "")),
+            title=problem_data.get("title", ""),
+            description_md=problem_data.get("description_md", ""),
+            constraints_md=problem_data.get("constraints_md"),
+            supported_languages=problem_data.get("supported_languages", []),
+            function_signatures=problem_data.get("function_signatures"),
+            sample_test_cases=problem_data.get("sample_test_cases", []),
+            time_limit_ms=problem_data.get("time_limit_ms", 2000),
+            memory_limit_kb=problem_data.get("memory_limit_kb", 262144),
+        )
+
+    complexity_raw = state_values.get("complexity_analysis")
+    complexity_model = None
+    if complexity_raw:
+        complexity_model = ComplexityAnalysisModel(**complexity_raw)
+
     return InterviewStepResponse(
         session_id=session_id,
         status=status_value,
@@ -252,6 +275,9 @@ def prepare_response(
         time_expired=state_values.get("time_expired"),
         is_follow_up=state_values.get("is_follow_up"),
         follow_up_count=state_values.get("follow_up_count"),
+        question_type=state_values.get("question_type", "behavioral"),
+        coding_problem=coding_problem,
+        complexity_analysis=complexity_model,
     )
 
 

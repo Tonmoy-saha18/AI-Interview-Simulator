@@ -10,14 +10,18 @@ def route_after_evaluation(state: InterviewState) -> str:
 
     Returns:
         "finish" - if question limit reached
-        "ask_follow_up" - if follow-up is needed (low score and not exceeded max follow-ups)
+        "analyze_complexity" - if this was a coding question with code submission
+        "ask_follow_up" - if follow-up is needed
         "ask_next" - if more questions needed
-
-    Only counts main questions (not follow-ups) when checking the question limit,
-    since follow-ups are nested under their parent questions.
     """
     asked = len(state.get("qa_history", []))
     limit = state.get("question_limit", 3)
+
+    # If this was a coding question with a code submission, run complexity analysis
+    question_type = state.get("question_type", "behavioral")
+    code_submission = state.get("code_submission")
+    if question_type == "coding" and code_submission:
+        return "analyze_complexity"
 
     if asked >= limit:
         return "finish"
@@ -45,3 +49,13 @@ def route_after_evaluation(state: InterviewState) -> str:
 def route_after_follow_up(state: InterviewState) -> str:
     """After a follow-up question is answered, always return to evaluation."""
     return "evaluate_answer"
+
+
+def route_after_code_eval(state: InterviewState) -> str:
+    """After complexity analysis, decide whether to continue or finish."""
+    asked = len(state.get("qa_history", []))
+    limit = state.get("question_limit", 3)
+
+    if asked >= limit:
+        return "finish"
+    return "ask_next"

@@ -76,6 +76,27 @@ class QARecordModel(BaseModel):
     follow_ups: Optional[List["QARecordModel"]] = None
 
 
+class ComplexityAnalysisModel(BaseModel):
+    estimated_time_complexity: Optional[str] = None
+    estimated_space_complexity: Optional[str] = None
+    reasoning: Optional[str] = None
+    meets_expected: Optional[bool] = None
+
+
+class CodingProblemBrief(BaseModel):
+    """Minimal problem info sent to the candidate during an interview."""
+
+    problem_id: str
+    title: str
+    description_md: str
+    constraints_md: Optional[str] = None
+    supported_languages: List[str] = Field(default_factory=list)
+    function_signatures: Optional[dict] = None
+    sample_test_cases: List[dict] = Field(default_factory=list)
+    time_limit_ms: int = 2000
+    memory_limit_kb: int = 262144
+
+
 class InterviewStepResponse(BaseModel):
     """Generic response returned after any state transition."""
 
@@ -96,6 +117,11 @@ class InterviewStepResponse(BaseModel):
     time_expired: Optional[bool] = None
     is_follow_up: Optional[bool] = None
     follow_up_count: Optional[int] = None
+
+    # Coding question fields
+    question_type: Optional[str] = None  # "behavioral" | "coding"
+    coding_problem: Optional[CodingProblemBrief] = None
+    complexity_analysis: Optional[ComplexityAnalysisModel] = None
 
 
 # ---------------------------------------------------------------------------

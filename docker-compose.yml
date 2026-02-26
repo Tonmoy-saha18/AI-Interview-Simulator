@@ -29,6 +29,37 @@ services:
       timeout: 5s
       retries: 5
 
+  minio:
+    image: minio/minio
+    container_name: ai-interview-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  judge:
+    build: ./judge-service
+    container_name: ai-interview-judge
+    ports:
+      - "8001:8001"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      JUDGE_MAX_WORKERS: "5"
+      JUDGE_RUN_TIMEOUT: "10"
+      JUDGE_SUBMIT_TIMEOUT_PER_CASE: "5"
+      JUDGE_MEMORY_LIMIT_MB: "256"
+
   backend:
     build: .
     container_name: ai-interview-backend
@@ -40,6 +71,12 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/ai_interview_db
       REDIS_URL: redis://redis:6379/0
       BASE_URL: http://localhost:8000
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: interview-cvs
+      MINIO_USE_SSL: "false"
+      JUDGE_SERVICE_URL: http://judge:8001
     volumes:
       - ./uploads:/app/uploads
     depends_on:
@@ -51,3 +88,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  minio_data:

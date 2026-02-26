@@ -1,5 +1,6 @@
 """SQLAlchemy models — re-exported for convenience."""
 
+from .coding import CodeTestCase, CodingProblem
 from .interview import (
     InterviewFeedback,
     InterviewLink,
@@ -14,6 +15,8 @@ from .organization import Organization
 from .user import User, UserRole
 
 __all__ = [
+    "CodeTestCase",
+    "CodingProblem",
     "InterviewFeedback",
     "InterviewLink",
     "InterviewLinkStatus",

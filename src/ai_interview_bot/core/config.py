@@ -29,6 +29,9 @@ class Settings:
 
     MAX_CV_FILE_SIZE_MB: int = int(os.getenv("MAX_CV_FILE_SIZE_MB", "10"))
 
+    # Judge Service
+    JUDGE_SERVICE_URL: str = os.getenv("JUDGE_SERVICE_URL", "http://localhost:8001")
+
     # JWT / Auth
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")

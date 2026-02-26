@@ -33,6 +33,7 @@ class InterviewLinkStatus(PyEnum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     EXPIRED = "expired"
+    REVOKED = "revoked"
 
 
 class InterviewType(PyEnum):
@@ -82,9 +83,24 @@ class InterviewLink(Base):
         nullable=False,
         default=InterviewLinkStatus.PENDING,
     )
+    organization_id = Column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_by_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    interview_type = Column(String(50), nullable=True, default="behavioral")
+    custom_instructions = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+    tags = Column(ARRAY(Text), nullable=True)
+    session_id = Column(
+        UUID(as_uuid=True), ForeignKey("interview_sessions.id", ondelete="SET NULL"), nullable=True
+    )
     cv_file_path = Column(String(500), nullable=True)
     cv_extracted_data = Column(JSONB, nullable=True)
 
+    organization = relationship("Organization", foreign_keys=[organization_id])
+    created_by = relationship("User", foreign_keys=[created_by_id])
     results = relationship(
         "InterviewResult", back_populates="interview_link", cascade="all, delete-orphan"
     )
@@ -96,7 +112,11 @@ class InterviewLink(Base):
         return datetime.utcnow() > self.expires_at
 
     def can_be_used(self) -> bool:
-        return self.status == InterviewLinkStatus.PENDING and not self.is_expired()
+        return (
+            self.status == InterviewLinkStatus.PENDING
+            and not self.is_expired()
+            and self.status != InterviewLinkStatus.REVOKED
+        )
 
 
 class InterviewResult(Base):

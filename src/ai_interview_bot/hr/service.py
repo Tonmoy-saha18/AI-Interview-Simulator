@@ -1,14 +1,14 @@
-"""Service for generating and validating interview links."""
+"""Service for generating and validating interview links (org-scoped)."""
 
 from __future__ import annotations
 
 import secrets
 import uuid
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import List, Optional
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import InterviewLink, InterviewLinkStatus
 
@@ -18,12 +18,12 @@ class LinkService:
 
     @staticmethod
     def generate_token() -> str:
-        """Generate a secure random token for interview link."""
         return secrets.token_urlsafe(32)
 
     @staticmethod
     async def create_interview_link(
         session: AsyncSession,
+        *,
         hr_email: str,
         candidate_email: str,
         candidate_name: Optional[str],
@@ -33,8 +33,13 @@ class LinkService:
         expires_in_days: int,
         cv_file_path: Optional[str] = None,
         cv_extracted_data: Optional[dict] = None,
+        organization_id: Optional[uuid.UUID] = None,
+        created_by_id: Optional[uuid.UUID] = None,
+        interview_type: str = "behavioral",
+        custom_instructions: Optional[str] = None,
+        notes: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> InterviewLink:
-        """Create a new interview link."""
         token = LinkService.generate_token()
         expires_at = datetime.utcnow() + timedelta(days=expires_in_days)
 
@@ -50,12 +55,17 @@ class LinkService:
             cv_file_path=cv_file_path,
             cv_extracted_data=cv_extracted_data,
             status=InterviewLinkStatus.PENDING,
+            organization_id=organization_id,
+            created_by_id=created_by_id,
+            interview_type=interview_type,
+            custom_instructions=custom_instructions,
+            notes=notes,
+            tags=tags,
         )
 
         session.add(interview_link)
         await session.flush()
         await session.refresh(interview_link)
-
         return interview_link
 
     @staticmethod
@@ -63,7 +73,6 @@ class LinkService:
         session: AsyncSession,
         token: str,
     ) -> Optional[InterviewLink]:
-        """Get interview link by token."""
         result = await session.execute(
             select(InterviewLink).where(InterviewLink.token == token)
         )
@@ -74,15 +83,13 @@ class LinkService:
         session: AsyncSession,
         token: str,
     ) -> tuple[bool, Optional[InterviewLink], Optional[str]]:
-        """Validate link and activate it if valid.
-
-        Returns:
-            (is_valid, interview_link, error_message)
-        """
         interview_link = await LinkService.get_link_by_token(session, token)
 
         if not interview_link:
             return False, None, "Invalid interview link token."
+
+        if interview_link.status == InterviewLinkStatus.REVOKED:
+            return False, None, "This interview link has been revoked."
 
         if interview_link.is_expired():
             interview_link.status = InterviewLinkStatus.EXPIRED
@@ -107,12 +114,10 @@ class LinkService:
         session: AsyncSession,
         interview_link_id: uuid.UUID,
     ) -> None:
-        """Mark interview link as completed."""
         result = await session.execute(
             select(InterviewLink).where(InterviewLink.id == interview_link_id)
         )
         interview_link = result.scalar_one_or_none()
-
         if interview_link:
             interview_link.status = InterviewLinkStatus.COMPLETED
             await session.commit()
@@ -122,7 +127,6 @@ class LinkService:
         session: AsyncSession,
         hr_email: str,
     ) -> list[InterviewLink]:
-        """Get all interview links created by an HR user."""
         result = await session.execute(
             select(InterviewLink)
             .where(InterviewLink.hr_email == hr_email)
@@ -131,12 +135,67 @@ class LinkService:
         return list(result.scalars().all())
 
     @staticmethod
+    async def get_links_by_organization(
+        session: AsyncSession,
+        organization_id: uuid.UUID,
+        *,
+        status_filter: Optional[str] = None,
+    ) -> list[InterviewLink]:
+        query = (
+            select(InterviewLink)
+            .where(InterviewLink.organization_id == organization_id)
+            .order_by(InterviewLink.created_at.desc())
+        )
+        if status_filter:
+            query = query.where(InterviewLink.status == InterviewLinkStatus(status_filter))
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+    @staticmethod
     async def get_link_by_id(
         session: AsyncSession,
         link_id: uuid.UUID,
     ) -> Optional[InterviewLink]:
-        """Get interview link by ID."""
         result = await session.execute(
             select(InterviewLink).where(InterviewLink.id == link_id)
         )
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def revoke_link(
+        session: AsyncSession,
+        link_id: uuid.UUID,
+    ) -> Optional[InterviewLink]:
+        link = await LinkService.get_link_by_id(session, link_id)
+        if link and link.status in (
+            InterviewLinkStatus.PENDING,
+            InterviewLinkStatus.IN_PROGRESS,
+        ):
+            link.status = InterviewLinkStatus.REVOKED
+            await session.flush()
+        return link
+
+    @staticmethod
+    async def patch_link(
+        session: AsyncSession,
+        link_id: uuid.UUID,
+        *,
+        expires_in_days: Optional[int] = None,
+        notes: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        custom_instructions: Optional[str] = None,
+    ) -> Optional[InterviewLink]:
+        link = await LinkService.get_link_by_id(session, link_id)
+        if not link:
+            return None
+        if expires_in_days is not None:
+            link.expires_at = datetime.utcnow() + timedelta(days=expires_in_days)
+        if notes is not None:
+            link.notes = notes
+        if tags is not None:
+            link.tags = tags
+        if custom_instructions is not None:
+            link.custom_instructions = custom_instructions
+        await session.flush()
+        await session.refresh(link)
+        return link

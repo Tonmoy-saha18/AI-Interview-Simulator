@@ -222,6 +222,53 @@ class FollowUpQuestionNode:
         return state
 
 
+class ComplexityAnalysisNode:
+    """Performs LLM-based Big-O analysis on submitted code."""
+
+    def __init__(self, runnable: Runnable) -> None:
+        self._runnable = runnable
+
+    def __call__(self, state: InterviewState) -> InterviewState:
+        code = state.get("code_submission")
+        problem_data = state.get("current_problem_data")
+        code_results = state.get("code_results")
+
+        if not code or not problem_data:
+            return state
+
+        prompt_inputs = {
+            "problem_title": problem_data.get("title", "Unknown"),
+            "expected_time": problem_data.get("expected_time_complexity", "unknown"),
+            "expected_space": problem_data.get("expected_space_complexity", "unknown"),
+            "language": state.get("code_language", "unknown"),
+            "code": code,
+        }
+
+        raw_response = self._runnable.invoke(prompt_inputs)
+        analysis = _parse_complexity(raw_response)
+
+        # Composite score: correctness 70% + complexity match 30%
+        correctness_score = 0
+        if code_results:
+            total = code_results.get("total_test_cases", 1)
+            passed = code_results.get("passed_count", 0)
+            correctness_score = (passed / total) * 100 if total else 0
+
+        complexity_score = 100 if analysis.get("meets_expected", False) else 50
+        composite = correctness_score * 0.7 + complexity_score * 0.3
+
+        eval_data = state.get("evaluation", {})
+        eval_data["code_correctness_score"] = round(correctness_score, 1)
+        eval_data["complexity_score"] = round(complexity_score, 1)
+        eval_data["composite_score"] = round(composite, 1)
+
+        state.update({
+            "complexity_analysis": analysis,
+            "evaluation": eval_data,
+        })
+        return state
+
+
 class FeedbackNode:
     """Produces the final interview feedback summary."""
 
@@ -293,6 +340,23 @@ def _parse_evaluation(raw_response: Any) -> EvaluationBreakdown:
     if follow_up:
         evaluation["follow_up"] = str(follow_up)
     return evaluation
+
+
+def _parse_complexity(raw_response: Any) -> Dict[str, Any]:
+    """Parse complexity analysis response from LLM."""
+    if isinstance(raw_response, dict):
+        return raw_response
+
+    text = str(raw_response).strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return {
+            "estimated_time_complexity": "unknown",
+            "estimated_space_complexity": "unknown",
+            "reasoning": text,
+            "meets_expected": False,
+        }
 
 
 def _clamp_score(score: Any) -> int:

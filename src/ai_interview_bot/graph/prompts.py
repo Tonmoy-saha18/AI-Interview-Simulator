@@ -18,6 +18,7 @@ class PromptBundle:
     evaluation: ChatPromptTemplate
     follow_up: ChatPromptTemplate
     feedback: ChatPromptTemplate
+    complexity: ChatPromptTemplate
 
 
 def build_default_prompts() -> PromptBundle:
@@ -140,11 +141,39 @@ def build_default_prompts() -> PromptBundle:
         ]
     )
 
+    complexity_prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                (
+                    "You are an expert algorithm analyst. Given submitted code and a problem description, "
+                    "estimate the time and space complexity in Big-O notation.\n\n"
+                    "Return valid JSON with keys:\n"
+                    "- estimated_time_complexity (str): e.g. 'O(n)', 'O(n log n)', 'O(n^2)'\n"
+                    "- estimated_space_complexity (str): e.g. 'O(1)', 'O(n)'\n"
+                    "- reasoning (str): Explain your analysis step by step\n"
+                    "- meets_expected (bool): Whether the solution meets or beats the expected complexity"
+                ),
+            ),
+            (
+                "human",
+                (
+                    "Problem: {problem_title}\n\n"
+                    "Expected Time Complexity: {expected_time}\n"
+                    "Expected Space Complexity: {expected_space}\n\n"
+                    "Submitted Code ({language}):\n```\n{code}\n```\n\n"
+                    "Analyze the complexity."
+                ),
+            ),
+        ]
+    )
+
     return PromptBundle(
         question=question_prompt,
         evaluation=evaluation_prompt,
         follow_up=follow_up_prompt,
         feedback=feedback_prompt,
+        complexity=complexity_prompt,
     )
 
 

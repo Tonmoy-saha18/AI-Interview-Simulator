@@ -29,6 +29,15 @@ class QARecord(TypedDict, total=False):
     follow_ups: List["QARecord"]
 
 
+class ComplexityAnalysis(TypedDict, total=False):
+    """Result of LLM-based Big-O analysis."""
+
+    estimated_time_complexity: str
+    estimated_space_complexity: str
+    reasoning: str
+    meets_expected: bool
+
+
 class InterviewState(TypedDict, total=False):
     """State passed between LangGraph nodes."""
 
@@ -51,6 +60,16 @@ class InterviewState(TypedDict, total=False):
     is_follow_up: bool
     follow_up_count: int
     max_follow_ups_per_question: int
+
+    # Coding question fields (Phase 2)
+    question_type: str  # "behavioral" | "coding"
+    current_problem_id: Optional[str]
+    current_problem_data: Optional[Dict[str, Any]]
+    code_submission: Optional[str]
+    code_language: Optional[str]
+    code_results: Optional[Dict[str, Any]]
+    complexity_analysis: Optional[ComplexityAnalysis]
+    hints_used: int
 
 
 @dataclass(slots=True)

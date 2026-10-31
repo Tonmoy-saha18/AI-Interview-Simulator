@@ -11,9 +11,9 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from .config import PromptBundle, build_default_prompts
-from .nodes import EvaluationNode, FeedbackNode, FollowUpQuestionNode, QuestionNode
-from .routing import route_after_evaluation, route_after_follow_up
+from .prompts import PromptBundle, build_default_prompts
+from .nodes import ComplexityAnalysisNode, EvaluationNode, FeedbackNode, FollowUpQuestionNode, QuestionNode
+from .routing import route_after_evaluation, route_after_follow_up, route_after_code_eval
 from .state import InterviewState
 
 
@@ -33,6 +33,10 @@ def _build_follow_up_chain(llm: Runnable, prompts: PromptBundle) -> Runnable:
     return prompts.follow_up | llm | StrOutputParser()
 
 
+def _build_complexity_chain(llm: Runnable, prompts: PromptBundle) -> Runnable:
+    return prompts.complexity | llm | StrOutputParser()
+
+
 def build_interview_app(
     llm: Optional[Runnable] = None,
     prompts: Optional[PromptBundle] = None,
@@ -43,7 +47,7 @@ def build_interview_app(
     Parameters
     ----------
     llm:
-        LangChain-compatible chat runnable. Defaults to `ChatOpenAI` (gpt-4o-mini).
+        LangChain-compatible chat runnable. Defaults to ``ChatOpenAI`` (gpt-4o-mini).
     prompts:
         Optional custom prompt templates.
     interrupt_after_question:
@@ -59,12 +63,14 @@ def build_interview_app(
     evaluation_node = EvaluationNode(_build_evaluation_chain(llm, prompts))
     follow_up_node = FollowUpQuestionNode(llm, prompts)
     feedback_node = FeedbackNode(_build_feedback_chain(llm, prompts))
+    complexity_node = ComplexityAnalysisNode(_build_complexity_chain(llm, prompts))
 
     graph = StateGraph(InterviewState)
     graph.add_node("generate_question", question_node)
     graph.add_node("evaluate_answer", evaluation_node)
     graph.add_node("ask_follow_up", follow_up_node)
     graph.add_node("generate_feedback", feedback_node)
+    graph.add_node("analyze_complexity", complexity_node)
 
     graph.set_entry_point("generate_question")
     graph.add_edge("generate_question", "evaluate_answer")
@@ -75,9 +81,17 @@ def build_interview_app(
             "ask_next": "generate_question",
             "ask_follow_up": "ask_follow_up",
             "finish": "generate_feedback",
+            "analyze_complexity": "analyze_complexity",
         },
     )
-    # After follow-up question, always go back to evaluation
+    graph.add_conditional_edges(
+        "analyze_complexity",
+        route_after_code_eval,
+        {
+            "ask_next": "generate_question",
+            "finish": "generate_feedback",
+        },
+    )
     graph.add_conditional_edges(
         "ask_follow_up",
         route_after_follow_up,
@@ -91,7 +105,7 @@ def build_interview_app(
     if interrupt_after_question:
         app = graph.compile(
             checkpointer=checkpointer,
-            interrupt_after=["generate_question", "ask_follow_up"],
+            interrupt_after=["generate_question", "ask_follow_up", "analyze_complexity"],
         )
     else:
         app = graph.compile(checkpointer=checkpointer)

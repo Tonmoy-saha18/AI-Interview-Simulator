@@ -1,4 +1,4 @@
-"""Configuration helpers and prompt templates for the interview bot."""
+"""Prompt templates and history formatting helpers for the interview bot."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from langchain_core.prompts import ChatPromptTemplate
+
+from .state import QARecord
 
 
 @dataclass(frozen=True)
@@ -16,6 +18,7 @@ class PromptBundle:
     evaluation: ChatPromptTemplate
     follow_up: ChatPromptTemplate
     feedback: ChatPromptTemplate
+    complexity: ChatPromptTemplate
 
 
 def build_default_prompts() -> PromptBundle:
@@ -52,7 +55,14 @@ def build_default_prompts() -> PromptBundle:
                 "system",
                 (
                     "You are an expert interviewer assessing responses for {role} candidates.\n"
-                    "Evaluate the answer across multiple dimensions on a 1-5 scale:\n"
+                    "Evaluate the answer across multiple dimensions on a 0-5 scale, using the following definitions\n"
+                    "0 = No understanding or completely incorrect\n"
+                    "1 = Very weak understanding or unclear communication\n"
+                    "2 = Partial understanding with noticeable errors\n"
+                    "3 = Adequate understanding, some gaps but generally reasonable\n"
+                    "4 = Strong understanding, clear reasoning, minor improvement areas\n"
+                    "5 = Excellent mastery, clear, accurate, and insightful response. \n"
+                    "Scoring Dimensions:\n"
                     "1. technical_depth: Understanding of technical concepts, accuracy, depth\n"
                     "2. communication: Clarity, structure, articulation, ability to explain\n"
                     "3. problem_solving: Approach, reasoning, solution quality, creativity\n\n"
@@ -131,22 +141,45 @@ def build_default_prompts() -> PromptBundle:
         ]
     )
 
+    complexity_prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                (
+                    "You are an expert algorithm analyst. Given submitted code and a problem description, "
+                    "estimate the time and space complexity in Big-O notation.\n\n"
+                    "Return valid JSON with keys:\n"
+                    "- estimated_time_complexity (str): e.g. 'O(n)', 'O(n log n)', 'O(n^2)'\n"
+                    "- estimated_space_complexity (str): e.g. 'O(1)', 'O(n)'\n"
+                    "- reasoning (str): Explain your analysis step by step\n"
+                    "- meets_expected (bool): Whether the solution meets or beats the expected complexity"
+                ),
+            ),
+            (
+                "human",
+                (
+                    "Problem: {problem_title}\n\n"
+                    "Expected Time Complexity: {expected_time}\n"
+                    "Expected Space Complexity: {expected_space}\n\n"
+                    "Submitted Code ({language}):\n```\n{code}\n```\n\n"
+                    "Analyze the complexity."
+                ),
+            ),
+        ]
+    )
+
     return PromptBundle(
         question=question_prompt,
         evaluation=evaluation_prompt,
         follow_up=follow_up_prompt,
         feedback=feedback_prompt,
+        complexity=complexity_prompt,
     )
-
-
-from typing import Iterable, Mapping
-
-from .state import QARecord
 
 
 def format_history(history: Iterable[QARecord]) -> str:
     """Format QA history for prompt injection.
-    
+
     Follow-up questions are displayed nested under their parent questions.
     """
     if not history:
@@ -156,8 +189,7 @@ def format_history(history: Iterable[QARecord]) -> str:
     for idx, record in enumerate(history, start=1):
         evaluation = record.get("evaluation", {})
         score = evaluation.get("overall_score") or evaluation.get("score", "N/A")
-        
-        # Include dimension scores if available
+
         dim_scores = []
         if evaluation.get("technical_depth"):
             dim_scores.append(f"Technical: {evaluation['technical_depth']}/5")
@@ -165,40 +197,46 @@ def format_history(history: Iterable[QARecord]) -> str:
             dim_scores.append(f"Communication: {evaluation['communication']}/5")
         if evaluation.get("problem_solving"):
             dim_scores.append(f"Problem Solving: {evaluation['problem_solving']}/5")
-        
+
         score_line = f"[Score] {score}/5"
         if dim_scores:
             score_line += f" ({', '.join(dim_scores)})"
         score_line += f" - {evaluation.get('reasoning', '')}"
-        
-        # Format main question
+
         lines.append(
             f"[Question {idx}] {record['question']}\n"
             f"[Answer] {record['answer']}\n"
             f"{score_line}"
         )
-        
-        # Format nested follow-up questions if any
+
         follow_ups = record.get("follow_ups", [])
         if follow_ups:
             for follow_up_idx, follow_up in enumerate(follow_ups, start=1):
                 follow_up_eval = follow_up.get("evaluation", {})
-                follow_up_score = follow_up_eval.get("overall_score") or follow_up_eval.get("score", "N/A")
-                
-                # Include dimension scores for follow-up
+                follow_up_score = (
+                    follow_up_eval.get("overall_score")
+                    or follow_up_eval.get("score", "N/A")
+                )
+
                 follow_up_dim_scores = []
                 if follow_up_eval.get("technical_depth"):
-                    follow_up_dim_scores.append(f"Technical: {follow_up_eval['technical_depth']}/5")
+                    follow_up_dim_scores.append(
+                        f"Technical: {follow_up_eval['technical_depth']}/5"
+                    )
                 if follow_up_eval.get("communication"):
-                    follow_up_dim_scores.append(f"Communication: {follow_up_eval['communication']}/5")
+                    follow_up_dim_scores.append(
+                        f"Communication: {follow_up_eval['communication']}/5"
+                    )
                 if follow_up_eval.get("problem_solving"):
-                    follow_up_dim_scores.append(f"Problem Solving: {follow_up_eval['problem_solving']}/5")
-                
+                    follow_up_dim_scores.append(
+                        f"Problem Solving: {follow_up_eval['problem_solving']}/5"
+                    )
+
                 follow_up_score_line = f"[Score] {follow_up_score}/5"
                 if follow_up_dim_scores:
                     follow_up_score_line += f" ({', '.join(follow_up_dim_scores)})"
                 follow_up_score_line += f" - {follow_up_eval.get('reasoning', '')}"
-                
+
                 lines.append(
                     f"  [Follow-up {follow_up_idx}] {follow_up['question']}\n"
                     f"  [Answer] {follow_up['answer']}\n"

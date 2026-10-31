@@ -13,8 +13,8 @@ from dotenv import load_dotenv
 from langgraph.errors import GraphInterrupt
 
 from .graph import build_interview_app
-from .state import InterviewConfig
-from .stream_utils import extract_interrupt_value, get_state_values, iter_event_values
+from .graph.state import InterviewConfig
+from .graph.stream_utils import extract_interrupt_value, get_state_values, iter_event_values
 
 
 def run_cli(argv: Iterable[str] | None = None) -> int:
@@ -117,7 +117,6 @@ def run_cli(argv: Iterable[str] | None = None) -> int:
                         },
                     )
                     break
-            # Stream finished without reaching feedback.
             if not interrupted:
                 return 0
         except GraphInterrupt as interruption:

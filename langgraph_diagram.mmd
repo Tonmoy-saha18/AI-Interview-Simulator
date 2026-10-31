@@ -1,17 +1,23 @@
 graph TD
-    START([Start]) --> generate_question[generate_question<br/>QuestionNode<br/>Sets difficulty & time limit]
-    generate_question --> evaluate_answer[evaluate_answer<br/>EvaluationNode<br/>Multi-dimensional scoring<br/>Time tracking]
-    evaluate_answer --> route{route_after_evaluation}
-    route -->|score < 3 OR follow_up hint<br/>ask_follow_up| ask_follow_up[ask_follow_up<br/>FollowUpQuestionNode<br/>Shorter time limit]
-    route -->|asked < question_limit<br/>ask_next| generate_question
-    route -->|asked >= question_limit<br/>finish| generate_feedback[generate_feedback<br/>FeedbackNode]
-    ask_follow_up --> evaluate_answer
-    generate_feedback --> END([End])
+    START([Start Interview]) --> init_state[Initialise InterviewState<br/>Set role, level, limits, timers]
+    init_state --> generate_question[generate_question<br/>QuestionNode<br/>Select difficulty<br/>Set time limit<br/>Reset follow-up count]
+    generate_question --> q_interrupt(((Await candidate answer)))
+    q_interrupt --> evaluate_answer[evaluate_answer<br/>EvaluationNode<br/>Score & breakdown<br/>Track time & history]
+    evaluate_answer --> route_main{route_after_evaluation<br/>Reached question limit?<br/>Need follow-up?}
+    route_main -->|finish| generate_feedback[generate_feedback<br/>FeedbackNode<br/>Summarise interview]
+    route_main -->|ask_next| generate_question
+    route_main -->|ask_follow_up| ask_follow_up[ask_follow_up<br/>FollowUpQuestionNode<br/>Use hint<br/>Shorter time limit]
+    ask_follow_up --> fu_interrupt(((Await follow-up answer)))
+    fu_interrupt --> evaluate_answer
+    generate_feedback --> END([End Interview])
     
     style START fill:#90EE90
     style END fill:#FFB6C1
+    style init_state fill:#E0FFFF
     style generate_question fill:#87CEEB
+    style q_interrupt fill:#FFFFFF,stroke:#87CEEB,stroke-width:2px
     style evaluate_answer fill:#DDA0DD
+    style route_main fill:#FFA500
     style ask_follow_up fill:#FFB347
+    style fu_interrupt fill:#FFFFFF,stroke:#FFB347,stroke-width:2px
     style generate_feedback fill:#F0E68C
-    style route fill:#FFA500
